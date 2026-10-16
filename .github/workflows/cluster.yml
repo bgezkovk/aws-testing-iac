@@ -33,15 +33,6 @@ env:
   HELM_VERSION: v3.22.1
 
 jobs:
-  debug-oidc:
-    runs-on: ubuntu-24.04
-    permissions:
-      id-token: write
-    steps:
-      - run: |
-          tok=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
-          echo "$tok" | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | jq '{sub, aud, repository, ref}'
   up:
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'up' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
