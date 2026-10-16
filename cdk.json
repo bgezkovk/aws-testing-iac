@@ -1,7 +1,7 @@
 {
   "app": "npx ts-node --prefer-ts-exts bin/app.ts",
   "context": {
-    "githubRepo": "bosheto/aws-testing-iac",
+    "githubRepo": "bgezkovk/aws-testing-iac",
     "githubDeployBranch": "main",
     "budgetLimitUsd": 10,
     "clusterName": "npa-test",
