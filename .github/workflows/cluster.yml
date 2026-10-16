@@ -1,0 +1,93 @@
+# Spin the test cluster up / down.
+#
+#   Actions -> cluster -> Run workflow -> action: up | down   (branch: main)
+#
+# Safety net: every 2 hours a scheduled run destroys the cluster stack if it is older than
+# MAX_AGE_HOURS (counted from its last create/update), so a forgotten cluster costs at most
+# ~10h x $0.12. Scheduled workflows only run from the default branch.
+name: cluster
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: up or down
+        type: choice
+        options: [up, down]
+        required: true
+  schedule:
+    - cron: "17 */2 * * *"
+
+# One cluster operation at a time, shared with the nuke workflow. Never cancel a running one.
+concurrency:
+  group: aws-testing-cluster
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # GitHub OIDC -> AWS
+  contents: read
+
+env:
+  MAX_AGE_HOURS: "8"
+  KUBECTL_VERSION: v1.33.13 # match kubernetesVersion in cdk.json (+/-1 minor)
+  HELM_VERSION: v3.22.1
+
+jobs:
+  up:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'up' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: ./.github/actions/aws-login
+        with:
+          role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          account-id: ${{ secrets.AWS_ACCOUNT_ID }}
+      - name: cdk deploy Cluster
+        run: npx cdk deploy Cluster --require-approval never --progress events
+      - uses: azure/setup-kubectl@bda439f5f36b99b262ebdcd3613869bddb064c8e # v5.2.0
+        with:
+          version: ${{ env.KUBECTL_VERSION }}
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: ${{ env.HELM_VERSION }}
+      # Self-managed VPC CNI with network policy (adopts the EKS-bootstrapped aws-node).
+      # NOTE: resets the node agent to the chart default image if it was patched.
+      - run: scripts/kubeconfig.sh
+      - run: scripts/install-cni.sh
+      - name: Summary
+        run: |
+          {
+            echo "### Cluster is up"
+            echo
+            echo "Auto-destroyed after ${MAX_AGE_HOURS}h. Locally: \`scripts/kubeconfig.sh --admin\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  down:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'down' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/aws-login
+        with:
+          role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          account-id: ${{ secrets.AWS_ACCOUNT_ID }}
+      - run: scripts/cluster-down.sh
+
+  reaper:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/aws-login
+        with:
+          role-arn: ${{ secrets.AWS_ROLE_ARN }}
+          account-id: ${{ secrets.AWS_ACCOUNT_ID }}
+      - run: scripts/cluster-down.sh --max-age-hours "$MAX_AGE_HOURS"

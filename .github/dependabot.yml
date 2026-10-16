@@ -1,0 +1,14 @@
+# Keeps the SHA-pinned actions (and their "# vX.Y.Z" comments) up to date via weekly PRs.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      cdk:
+        patterns: ["aws-cdk", "aws-cdk-lib", "constructs"]

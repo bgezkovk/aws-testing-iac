@@ -1,0 +1,36 @@
+# Type-check, synth and lint. No AWS access.
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx tsc -p .
+      - name: cdk synth (no credentials needed)
+        run: npx cdk synth -q
+        env:
+          CDK_DEFAULT_ACCOUNT: "000000000000"
+          BUDGET_EMAIL: ci@example.invalid # dummy so the Foundation stack is synthesized too
+      - name: bash -n
+        run: |
+          rc=0
+          for f in $(git ls-files '*.sh'); do echo "bash -n $f"; bash -n "$f" || rc=1; done
+          exit $rc
+      - name: shellcheck
+        continue-on-error: true
+        run: git ls-files '*.sh' | xargs shellcheck -x

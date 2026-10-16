@@ -1,0 +1,47 @@
+name: aws-login
+description: >
+  GitHub OIDC -> AWS credentials for the github-actions-deployer role (Foundation stack),
+  then refuse to continue unless they belong to the expected account.
+  The calling job needs `permissions: id-token: write` and must run on the deploy branch
+  (the role trust only accepts repo:<repo>:ref:refs/heads/main).
+inputs:
+  role-arn:
+    description: secrets.AWS_ROLE_ARN (GithubActionsRoleArn output of the Foundation stack)
+    required: true
+  account-id:
+    description: secrets.AWS_ACCOUNT_ID (a secret so GitHub masks it in public logs)
+    required: true
+  duration-seconds:
+    description: Session length; the role's maximum is 7200
+    default: "3600"
+runs:
+  using: composite
+  steps:
+    - name: Check repository variables
+      shell: bash
+      env:
+        ROLE_ARN: ${{ inputs.role-arn }}
+        ACCOUNT_ID: ${{ inputs.account-id }}
+      run: |
+        [ -n "$ROLE_ARN" ]   || { echo "::error::Repository secret AWS_ROLE_ARN is not set (fork PRs never get secrets)"; exit 1; }
+        [ -n "$ACCOUNT_ID" ] || { echo "::error::Repository secret AWS_ACCOUNT_ID is not set"; exit 1; }
+    - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      with:
+        role-to-assume: ${{ inputs.role-arn }}
+        role-session-name: gh-${{ github.run_id }}-${{ github.run_attempt }}
+        role-duration-seconds: ${{ inputs.duration-seconds }}
+        aws-region: eu-west-1
+        mask-aws-account-id: true
+    - name: Verify account
+      shell: bash
+      env:
+        ACCOUNT_ID: ${{ inputs.account-id }}
+      run: |
+        actual="$(aws sts get-caller-identity --query Account --output text)"
+        aws sts get-caller-identity --query Arn --output text
+        if [ "$actual" != "$ACCOUNT_ID" ]; then
+          echo "::error::Credentials are for account $actual, expected $ACCOUNT_ID. Refusing to continue."
+          exit 1
+        fi
+        echo "CDK_DEFAULT_ACCOUNT=$actual" >> "$GITHUB_ENV"
+        echo "CDK_DEFAULT_REGION=eu-west-1" >> "$GITHUB_ENV"
