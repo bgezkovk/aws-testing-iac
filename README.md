@@ -106,6 +106,9 @@ Do [console steps A](#a-before-the-first-deploy-as-root--current-account-owner) 
 1. Edit `cdk.json` context:
    - `githubRepo` — `owner/repo` of this repository on GitHub (case-sensitive, must match exactly;
      only workflows on `githubDeployBranch` of that repo can assume the CI role)
+   - `githubOwnerId`, `githubRepoId` — numeric ids; GitHub's OIDC `sub` claim contains them
+     (`repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main`):
+     `gh api repos/<owner>/<repo> --jq '.owner.id, .id'`
 
    Set the budget e-mail **outside the repo** (it is public) — once, in your user-level CDK config
    `~/.cdk.json`, which CDK merges into every app's context:
@@ -168,7 +171,7 @@ workflow runs on `main` of this exact repo. What that relies on, and what to kee
 | Topic | How it's handled |
 |---|---|
 | Credentials | None in the repo. CI uses GitHub OIDC → short-lived STS credentials. `AWS_ROLE_ARN` / `AWS_ACCOUNT_ID` are repository **secrets**, so they are masked in logs. |
-| Forks / PRs | The CI role trusts only `repo:<githubRepo>:ref:refs/heads/main`. PR runs (fork or not) get a different OIDC subject, and fork PRs get no secrets. `validate` has no AWS access. `pull_request_target` is not used — keep it that way. |
+| Forks / PRs | The CI role trusts only `repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/main` (numeric ids: a deleted repo re-created under the same name by someone else doesn't match). PR runs (fork or not) get a different OIDC subject, and fork PRs get no secrets. `validate` has no AWS access. `pull_request_target` is not used — keep it that way. |
 | Who can deploy / nuke | Only users with write access can trigger `workflow_dispatch` or merge to `main`. Protecting `main` is what keeps admin rights in the account behind review. |
 | Public logs | Logs of public repos are world-readable. The account id is masked (secret + `mask-aws-account-id`). Workflows don't print stack outputs, and the nuke plan is not uploaded as an artifact or summary — for the full inventory run `cleanup/cleanup.sh plan` locally. |
 | Personal data | The budget e-mail lives in `~/.cdk.json`, not in this repo. |

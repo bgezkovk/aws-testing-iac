@@ -14,6 +14,8 @@ const ctx = (key: keyof AppContext) => {
 
 const appCtx: AppContext = {
   githubRepo: ctx('githubRepo'),
+  githubOwnerId: String(ctx('githubOwnerId')),
+  githubRepoId: String(ctx('githubRepoId')),
   githubDeployBranch: ctx('githubDeployBranch'),
   // Not in cdk.json (public repo): from ~/.cdk.json context, -c budgetEmail=..., or BUDGET_EMAIL.
   budgetEmail: app.node.tryGetContext('budgetEmail') ?? process.env.BUDGET_EMAIL ?? '',

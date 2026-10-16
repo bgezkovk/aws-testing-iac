@@ -29,7 +29,12 @@ export const IAM_NAMES = {
 export const ECR_REPO_NAME = 'network-policy-agent';
 
 export interface AppContext {
-  githubRepo: string;         // owner/repo, e.g. bosheto/aws-testing-iac
+  githubRepo: string;         // owner/repo, e.g. bgezkovk/aws-testing-iac
+  // Numeric IDs (gh api repos/<owner>/<repo> --jq '.owner.id, .id'). GitHub puts them in the OIDC
+  // sub claim: repo:<owner>@<ownerId>/<repo>@<repoId>:ref:... Pinning them means a deleted/renamed
+  // repo re-created under the same name by someone else does not match.
+  githubOwnerId: string;
+  githubRepoId: string;
   githubDeployBranch: string; // branch allowed to assume the CI role
   budgetEmail: string;
   budgetLimitUsd: number;

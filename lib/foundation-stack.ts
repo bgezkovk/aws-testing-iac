@@ -96,14 +96,17 @@ export class FoundationStack extends cdk.Stack {
       clientIdList: ['sts.amazonaws.com'],
     });
 
-    // sub is exact: only workflow runs on the deploy branch of this repo. Jobs must NOT use
-    // a GitHub `environment:` - that changes sub to repo:<repo>:environment:<name>.
+    // sub is exact: only workflow runs on the deploy branch of this repo. GitHub's sub uses
+    // immutable ids: repo:<owner>@<ownerId>/<repo>@<repoId>:ref:refs/heads/<branch>.
+    // Jobs must NOT use a GitHub `environment:` - that changes the suffix to :environment:<name>.
+    const [owner, repo] = appCtx.githubRepo.split('/');
+    const sub = `repo:${owner}@${appCtx.githubOwnerId}/${repo}@${appCtx.githubRepoId}:ref:refs/heads/${appCtx.githubDeployBranch}`;
     const ciRole = new iam.Role(this, 'GithubActionsRole', {
       roleName: IAM_NAMES.ciRole,
       assumedBy: new iam.WebIdentityPrincipal(oidc.attrArn, {
         StringEquals: {
           [`${githubHost}:aud`]: 'sts.amazonaws.com',
-          [`${githubHost}:sub`]: `repo:${appCtx.githubRepo}:ref:refs/heads/${appCtx.githubDeployBranch}`,
+          [`${githubHost}:sub`]: sub,
         },
       }),
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AdministratorAccess')],

@@ -4,5 +4,7 @@ cdk.out/
 !jest.config.js
 *.d.ts
 .env
-kubeconfig*
+# real kubeconfigs at the repo root only (scripts/kubeconfig.sh must stay tracked)
+/kubeconfig*
+*.kubeconfig
 cdk.context.json

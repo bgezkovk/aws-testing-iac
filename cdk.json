@@ -2,6 +2,8 @@
   "app": "npx ts-node --prefer-ts-exts bin/app.ts",
   "context": {
     "githubRepo": "bgezkovk/aws-testing-iac",
+    "githubOwnerId": "1753707",
+    "githubRepoId": "1422264678",
     "githubDeployBranch": "main",
     "budgetLimitUsd": 10,
     "clusterName": "npa-test",
