@@ -1,0 +1,202 @@
+# aws-nuke v3 config (ekristen/aws-nuke, pinned in cleanup.sh).
+# Template: cleanup.sh replaces the ACCOUNT_ID placeholder (written with double
+# underscores) in a temp copy.
+# Do not run aws-nuke against this file directly.
+#
+# Names here must match lib/config.ts (STACK_NAMES, IAM_NAMES) and the CDK default
+# bootstrap qualifier "hnb659fds". Name filters have no region, so they protect the
+# matching resources in every region (CDK is bootstrapped in eu-west-1 only).
+
+# aws-nuke refuses to start with an empty blocklist. This is a dummy account id
+# that does not exist, so the requirement is met without side effects.
+blocklist:
+  - "999999999999"
+
+# (blocklist-terms defaults to ["prod"]: aliases containing "prod" are refused.)
+
+# "all" = every region enabled in the account, plus "global" (IAM, Budgets, ...).
+# Other entries are ignored when "all" is present.
+regions:
+  - all
+
+settings:
+  EC2Instance:
+    DisableDeletionProtection: true
+    DisableStopProtection: true
+  EC2Image:
+    IncludeDisabled: true
+    IncludeDeprecated: true
+    DisableDeregistrationProtection: true
+  RDSInstance:
+    DisableDeletionProtection: true
+  DynamoDBTable:
+    DisableDeletionProtection: true
+  # Only affects stacks that are NOT filtered below (the foundation stacks are never touched).
+  CloudFormationStack:
+    DisableDeletionProtection: true
+
+resource-types:
+  excludes:
+    # Free account settings, not worth the risk: deleting a virtual MFA device could
+    # remove the MFA of the root user or of "devops" (lockout). Assigned devices of
+    # devops are also covered by the IAMUserMFADevice filter below.
+    - IAMVirtualMFADevice
+    # Deprecated / closed services: their APIs error ("not available", endpoint gone)
+    # in new accounts and only add noise and failures to every run.
+    - FMSNotificationChannel
+    - FMSPolicy
+    - MachineLearningMLModel
+    - MachineLearningDataSource
+    - MachineLearningBranchPrediction
+    - MachineLearningEvaluation
+    - RoboMakerRobotApplication
+    - RoboMakerSimulationApplication
+    - RoboMakerSimulationJob
+    - OpsWorksApp
+    - OpsWorksInstance
+    - OpsWorksLayer
+    - OpsWorksUserProfile
+    - OpsWorksCMBackup
+    - OpsWorksCMServer
+    - OpsWorksCMServerState
+    - CodeStarProject
+    - Cloud9Environment
+    - CloudSearchDomain
+    - RedshiftServerlessSnapshot
+    - RedshiftServerlessNamespace
+    - RedshiftServerlessWorkgroup
+    # Known listing bug (rebuy-de/aws-nuke#515); tag options are free.
+    - ServiceCatalogTagOption
+    - ServiceCatalogTagOptionPortfolioAttachment
+    # S3Object is intentionally NOT excluded: objects in the protected CDK assets
+    # buckets are deleted (cdk re-uploads missing assets on the next deploy).
+
+presets:
+  # Everything owned by the stacks that must survive:
+  #   aws-testing-foundation and CDKToolkit (eu-west-1).
+  foundation:
+    filters:
+      # The stacks themselves: nuke must never start a stack delete on them.
+      # aws-testing-cluster is NOT listed: it is deleted.
+      CloudFormationStack:
+        - aws-testing-foundation
+        - CDKToolkit # CDK bootstrap stack, one per bootstrapped region
+
+      # ---- devops user (IAM_NAMES.devopsUser) --------------------------------
+      IAMUser:
+        - devops
+      IAMLoginProfile:
+        - devops # console password
+      IAMUserPolicy: # inline policies, id "<user> -> <policy>"
+        - type: glob
+          value: "devops -> *"
+      IAMUserPolicyAttachment: # managed policy attachments
+        - property: UserName
+          value: devops
+      IAMUserAccessKey:
+        - property: UserName
+          value: devops
+      IAMUserMFADevice: # id "<user> -> <device>"
+        - type: glob
+          value: "devops -> *"
+      IAMUserGroupAttachment: # in case devops is put in a group by hand
+        - type: glob
+          value: "devops -> *"
+      IAMUserSSHPublicKey:
+        - type: glob
+          value: "devops -> *"
+      IAMUserHTTPSGitCredential:
+        - type: glob
+          value: "devops -> *"
+      IAMServiceSpecificCredential: # e.g. CodeCommit / Bedrock credentials
+        - property: UserName
+          value: devops
+
+      # ---- Roles: foundation roles + CDK bootstrap roles (all regions) ---------
+      # CDK roles are named cdk-hnb659fds-<kind>-role-<account>-<region>.
+      IAMRole:
+        - devops-admin
+        - devops-read-only
+        - github-actions-deployer
+        - type: glob
+          value: "cdk-hnb659fds-*"
+      IAMRolePolicyAttachment:
+        - property: RoleName
+          value: devops-admin
+        - property: RoleName
+          value: devops-read-only
+        - property: RoleName
+          value: github-actions-deployer
+        - property: RoleName
+          type: glob
+          value: "cdk-hnb659fds-*"
+      IAMRolePolicy: # inline role policies (the CDK bootstrap roles use these)
+        - property: role:RoleName
+          value: devops-admin
+        - property: role:RoleName
+          value: devops-read-only
+        - property: role:RoleName
+          value: github-actions-deployer
+        - property: role:RoleName
+          type: glob
+          value: "cdk-hnb659fds-*"
+      # Customer managed policies created by CDK bootstrap (none by default; cheap insurance).
+      IAMPolicy:
+        - property: Name
+          type: glob
+          value: "cdk-hnb659fds-*"
+
+      # GitHub Actions OIDC identity provider of the foundation stack. Exact ARN so the
+      # EKS cluster's own OIDC provider (oidc.eks.*) is still deleted.
+      IAMOpenIDConnectProvider:
+        - "arn:aws:iam::__ACCOUNT_ID__:oidc-provider/token.actions.githubusercontent.com"
+
+      # ---- CDK bootstrap (CDKToolkit) data, every bootstrapped region ----------
+      # The bucket is kept, its objects are deleted (no S3Object filter).
+      S3Bucket:
+        - property: Name
+          type: glob
+          value: "cdk-hnb659fds-assets-*"
+      ECRRepository: # id is "Repository: <name>"; this type has no Name property
+        - type: glob
+          value: "Repository: cdk-hnb659fds-container-assets-*"
+      SSMParameter:
+        - /cdk-bootstrap/hnb659fds/version
+
+      # ---- Account-level settings --------------------------------------------
+      BudgetsBudget:
+        - aws-testing-monthly
+      IAMAccountSettingPasswordPolicy:
+        - custom # the account password policy has a fixed id "custom"
+      # (Account alias: aws-nuke has no resource type for it, so it is never deleted.)
+
+  # Default VPCs are free and many tools expect them. Keep them in every region.
+  default-vpc:
+    filters:
+      EC2VPC:
+        - property: IsDefault
+          value: "true"
+      EC2Subnet:
+        - property: DefaultVPC
+          value: "true"
+      EC2RouteTable:
+        - property: DefaultVPC
+          value: "true"
+      EC2DHCPOption:
+        - property: DefaultVPC
+          value: "true"
+      EC2InternetGateway:
+        - property: DefaultVPC
+          value: "true"
+      EC2InternetGatewayAttachment:
+        - property: DefaultVPC
+          value: "true"
+      EC2DefaultSecurityGroupRule: # rules of "default" security groups only
+        - property: DefaultVPC
+          value: "true"
+
+accounts:
+  "__ACCOUNT_ID__":
+    presets:
+      - foundation
+      - default-vpc

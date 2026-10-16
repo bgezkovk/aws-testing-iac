@@ -1,0 +1,12 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/app.ts",
+  "context": {
+    "githubRepo": "bosheto/aws-testing-iac",
+    "githubDeployBranch": "main",
+    "budgetLimitUsd": 10,
+    "clusterName": "npa-test",
+    "kubernetesVersion": "1.34",
+    "nodeInstanceTypes": ["t3a.medium", "t3.medium"],
+    "@aws-cdk/core:newStyleStackSynthesis": true
+  }
+}

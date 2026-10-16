@@ -1,0 +1,22 @@
+# Values for the self-managed VPC CNI (chart eks/aws-vpc-cni, version pinned in scripts/install-cni.sh).
+# The node agent image is NOT set here: scripts/set-npa-image.sh passes nodeAgent.image.override.
+
+# The aws-node DaemonSet bootstrapped by EKS uses selector k8s-app=aws-node; selectors are
+# immutable, so the chart must keep it when adopting the DaemonSet.
+originalMatchLabels: true
+
+# Turns on the aws-eks-nodeagent container (--enable-network-policy=true) AND sets
+# enable-network-policy-controller: "true" in the amazon-vpc-cni ConfigMap
+# (enables the EKS-hosted network policy controller).
+enableNetworkPolicy: true
+
+nodeAgent:
+  enablePolicyEventLogs: true # per-flow allow/deny decisions in the agent log on the node
+  logLevel: debug
+
+# Pull the AWS images from the in-region EKS registry (chart default is us-west-2).
+image:
+  region: eu-west-1
+init:
+  image:
+    region: eu-west-1
